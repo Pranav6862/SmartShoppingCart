@@ -14,3 +14,14 @@ web/static/uploads/
 
 # Local secrets
 .env
+
+# IDE settings
+.vscode/
+.idea/
+
+# Machine Learning weights
+*.pt
+
+# Database files (optional, remove if you want to push your products.db)
+*.db
+*.sqlite3
