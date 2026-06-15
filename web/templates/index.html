@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SmartCart | AI Shopping Assistant</title>
+  <link rel="stylesheet" href="/static/style.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  NAVBAR                                                -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<nav class="navbar">
+
+  <div class="nav-brand">
+    <div class="brand-icon">SC</div>
+    <div class="brand-text">
+      <div class="brand-name">SmartCart</div>
+      <div class="brand-sub">AI Shopping Assistant</div>
+    </div>
+  </div>
+
+  <div class="nav-divider"></div>
+
+  <!-- System Status Pill -->
+  <div class="status-pill" id="statusPill">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusLabel">System Offline</span>
+  </div>
+
+  <div class="status-pill" id="robotPill">
+    <span id="robotPillLabel">Follow Idle</span>
+  </div>
+
+  <!-- Tracker Pill -->
+  <div class="status-pill" id="trackerPill">
+    <span id="trackerPillLabel">No Target</span>
+  </div>
+
+  <!-- Right stats -->
+  <div class="nav-stats">
+    <div class="nav-stat" id="navFps">— FPS</div>
+    <div class="nav-stat" id="navFrames">Frame 0</div>
+    <div class="nav-stat" id="navPeople">People 0</div>
+    <div class="nav-clock" id="navClock">00:00:00</div>
+  </div>
+
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  CRITICAL ALERT BANNER                                 -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="critical-alert-banner hidden" id="criticalAlert">
+  <div class="cab-icon">⚠️</div>
+  <div class="cab-content">
+    <div class="cab-title" id="caTitle">Obstacle Detected</div>
+    <div class="cab-sub" id="caSub">Robot has stopped. Please clear the path.</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  STARTUP OVERLAY                                       -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="startup-overlay" id="startupOverlay">
+  <div class="startup-card">
+
+    <div class="startup-header">
+      <div class="startup-icon">SC</div>
+      <div>
+        <div class="startup-title">Start New Session</div>
+        <div class="startup-subtitle">
+          Choose a video source and begin scanning
+        </div>
+      </div>
+    </div>
+
+    <div class="startup-body">
+
+      <!-- Customer Name -->
+      <div class="form-group">
+        <label class="form-label">Customer Name</label>
+        <input
+          type        = "text"
+          id          = "customerInput"
+          class       = "form-input"
+          placeholder = "Enter customer name…"
+          value       = "Customer"
+        />
+      </div>
+
+      <!-- Source Selection -->
+      <div class="form-group">
+        <label class="form-label">Video Source</label>
+        <div class="source-grid">
+          <div class="source-option selected"
+               id="srcWebcam"
+               onclick="setSource('webcam')">
+            <div class="so-icon">Live</div>
+            <div class="so-title">Live Webcam</div>
+            <div class="so-sub">Use laptop or external camera</div>
+          </div>
+          <div class="source-option"
+               id="srcVideo"
+               onclick="setSource('video')">
+            <div class="so-icon">File</div>
+            <div class="so-title">Video File</div>
+            <div class="so-sub">Upload a recorded video</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Upload Zone (hidden by default) -->
+      <div id="uploadArea" class="hidden">
+        <div class="upload-zone"
+             id="dropZone"
+             onclick="document.getElementById('fileInput').click()">
+          <input
+            type     = "file"
+            id       = "fileInput"
+            accept   = ".mp4,.avi,.mov,.mkv,.webm"
+            style    = "display:none"
+            onchange = "onFileSelect(event)"
+          />
+          <div class="uz-icon">Upload</div>
+          <div class="uz-title">Drop video or click to browse</div>
+          <div class="uz-sub">MP4 · AVI · MOV · MKV supported</div>
+        </div>
+
+        <div class="upload-progress hidden" id="uploadBar">
+          <div class="ubar-track">
+            <div class="ubar-fill" id="ubarFill"></div>
+          </div>
+          <div class="ubar-text" id="ubarText">Uploading…</div>
+        </div>
+
+        <div class="upload-success hidden" id="uploadSuccess">
+          <span id="uploadedName">file.mp4</span>
+        </div>
+      </div>
+
+    </div><!-- /startup-body -->
+
+    <div class="startup-footer">
+      <button
+        class   = "btn btn-primary btn-lg btn-full"
+        id      = "btnStart"
+        onclick = "startSession()"
+      >
+        Start SmartCart Session
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  MAIN APP BODY                                         -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="app-body" id="appBody">
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!--  LEFT COLUMN                                       -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="col-left">
+
+    <!-- ── Video Feed ──────────────────────────────── -->
+    <div class="video-section">
+
+      <!-- Top floating chips -->
+      <div class="video-chips">
+        <span class="vchip vchip-live" id="liveBadge">Offline</span>
+        <span class="vchip vchip-track" id="trackBadge">NO LOCK</span>
+        <span class="vchip vchip-scan ready" id="scanBadge">● READY</span>
+        <span class="vchip-spacer"></span>
+        <span class="vchip vchip-people" id="peopleBadge">People 0</span>
+      </div>
+
+      <!-- Video Stream -->
+      <img
+        id  = "videoFeed"
+        src = "/video_feed"
+        alt = "Camera Feed"
+        class="video-el"
+      />
+      <!-- AI Overlay -->
+      <canvas id="aiOverlay"></canvas>
+
+
+      <!-- Bottom strip -->
+      <div class="video-bottom-strip">
+        <span class="vbs-fps" id="videoFps">0 FPS</span>
+        <span class="vbs-total" id="videoTotal">Cart: $0.00</span>
+      </div>
+
+      <!-- Scan flash effect -->
+      <div class="scan-flash" id="scanFlash"></div>
+
+      <!-- Pause overlay -->
+      <div class="pause-overlay hidden" id="pauseOverlay">
+        <div class="pause-icon-lg">⏸</div>
+        <div class="pause-text-lg">PAUSED</div>
+      </div>
+
+    </div><!-- /video-section -->
+
+    <!-- ── Control Bar ─────────────────────────────── -->
+    <div class="controls-section" id="controlsSection">
+
+      <button class="btn btn-ghost btn-sm"
+              id="btnPause"
+              onclick="togglePause()"
+              title="Pause / Resume">
+        Pause
+      </button>
+
+      <div class="ctrl-sep"></div>
+
+      <button class="btn btn-success btn-sm"
+              onclick="lockCustomer()"
+              title="Auto lock nearest person">
+        Lock Target
+      </button>
+      <button class="btn btn-ghost btn-sm"
+              onclick="switchCustomer()"
+              title="Switch to next person">
+        Switch
+      </button>
+      <button class="btn btn-ghost btn-sm"
+              onclick="unlockCustomer()"
+              title="Unlock current customer">
+        Unlock
+      </button>
+
+      <div class="ctrl-sep"></div>
+
+      <button class="btn btn-ghost btn-sm"
+              onclick="undoAction()"
+              title="Undo last cart action">
+        Undo
+      </button>
+      <button class="btn btn-danger-ghost btn-sm"
+              onclick="confirmClear()"
+              title="Clear entire cart">
+        Clear
+      </button>
+
+      <div class="ctrl-sep"></div>
+
+      <button class="btn btn-danger-ghost btn-sm"
+              onclick="stopSession()"
+              title="Stop session">
+        Stop
+      </button>
+
+    </div><!-- /controls-section -->
+
+    <!-- ── Robot Status Strip ──────────────────────── -->
+    <div class="robot-strip hidden" id="robotStrip">
+
+      <div class="robot-strip-header"
+           onclick="toggleRobotStrip()">
+        <div class="rsh-left">
+          <span class="rsh-title">Follow System</span>
+          <span class="rsh-mode" id="rshMode">OFFLINE</span>
+        </div>
+        <span class="rsh-toggle" id="rshToggle">▼</span>
+      </div>
+
+      <div class="robot-strip-body" id="robotStripBody">
+
+        <!-- Direction -->
+        <div class="rs-cell direction-cell" id="rsDirCell">
+          <div class="rs-label">Direction</div>
+          <div class="dir-arrow-big" id="rsDirArrow">⬤</div>
+          <div class="rs-value indigo" id="rsDirText">IDLE</div>
+        </div>
+
+        <!-- Speed -->
+        <div class="rs-cell">
+          <div class="rs-label">Wheel Speed</div>
+          <div class="rs-value" id="rsRpm">0</div>
+          <div class="rs-sub">RPM</div>
+        </div>
+
+        <!-- Motors -->
+        <div class="rs-cell">
+          <div class="rs-label">Motors L / R</div>
+          <div class="rs-value indigo" id="rsMotors">0% / 0%</div>
+          <div class="rs-sub" id="rsMoving">Stopped</div>
+        </div>
+
+        <!-- Battery -->
+        <div class="rs-cell">
+          <div class="rs-label">Battery</div>
+          <div class="rs-value green" id="rsBatt">--%</div>
+          <div class="batt-bar-wrap">
+            <div class="batt-bar-fill high"
+                 id="rsBattBar"
+                 style="width:0%"></div>
+          </div>
+        </div>
+
+        <!-- Sensor -->
+        <div class="rs-cell">
+          <div class="rs-label">Front Sensor</div>
+          <div class="rs-value" id="rsFront">-- cm</div>
+          <div class="sensor-bar-wrap" id="rsSensorBar">
+            <div class="sensor-seg" id="ss1"></div>
+            <div class="sensor-seg" id="ss2"></div>
+            <div class="sensor-seg" id="ss3"></div>
+            <div class="sensor-seg" id="ss4"></div>
+            <div class="sensor-seg" id="ss5"></div>
+          </div>
+        </div>
+
+        <!-- Distance -->
+        <div class="rs-cell">
+          <div class="rs-label">Dist. Traveled</div>
+          <div class="rs-value green" id="rsDistance">0.000</div>
+          <div class="rs-sub">meters</div>
+        </div>
+
+      </div><!-- /robot-strip-body -->
+
+    </div><!-- /robot-strip -->
+
+    <!-- ── Robot Following Card ─────────────────────── -->
+    <div class="robot-following-card" id="rfCard">
+      <div class="rfc-title">Customer Follow Status</div>
+
+      <div class="rfc-grid">
+
+        <!-- Direction box -->
+        <div class="rfc-dir idle" id="rfcDirBox">
+          <div class="rfc-arrow" id="rfcArrow">⬤</div>
+          <div class="rfc-dir-label" id="rfcDirLabel">IDLE</div>
+        </div>
+
+        <!-- Customer stat -->
+        <div class="rfc-stat">
+          <div class="rfc-stat-label">Target</div>
+          <div class="rfc-stat-value indigo" id="rfcTarget">None</div>
+          <div class="rfc-stat-sub" id="rfcStatus">Not tracking</div>
+        </div>
+
+        <!-- Radar View -->
+        <div class="radar-wrap" style="grid-column: span 2;">
+          <canvas id="radarCanvas"></canvas>
+          <div class="radar-label" id="radarLabel">Radar & Heading</div>
+        </div>
+
+      </div>
+    </div><!-- /robot-following-card -->
+
+    <!-- ── Movement Log ─────────────────────────────── -->
+    <div class="movement-log hidden" id="movementLog">
+      <div class="ml-title">Movement Log</div>
+      <div class="ml-list" id="mlList">
+        <div class="ml-entry">
+          <span class="ml-time">--:--:--</span>
+          <span class="ml-icon">⬤</span>
+          <span class="ml-desc">Waiting for session to start…</span>
+          <span class="ml-badge idle">IDLE</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Quick Scan Drawer ────────────────────────── -->
+    <div class="quick-scan-section">
+      <div class="qs-header" onclick="toggleQS()">
+        <span class="qs-title">Quick Scan</span>
+        <span class="btn btn-ghost btn-sm"
+              id="qsToggleBtn">Show ▼</span>
+      </div>
+      <div class="qs-body" id="qsBody">
+        <button class="qs-chip"
+                onclick="quickScan('049000028911')">
+          Coca Cola
+        </button>
+        <button class="qs-chip"
+                onclick="quickScan('028400090179')">
+          Doritos
+        </button>
+        <button class="qs-chip"
+                onclick="quickScan('049000006582')">
+          Pepsi
+        </button>
+        <button class="qs-chip"
+                onclick="quickScan('078000053401')">
+          Red Bull
+        </button>
+        <button class="qs-chip"
+                onclick="quickScan('038000596148')">
+          Corn Flakes
+        </button>
+        <button class="qs-chip"
+                onclick="quickScan('070847811169')">
+          Tropicana
+        </button>
+        <button class="qs-chip"
+                onclick="quickScan('041570037607')">
+          Oreo
+        </button>
+        <button class="qs-chip"
+                onclick="quickScan('030100301023')">
+          Pringles
+        </button>
+        <button class="qs-chip"
+                onclick="quickScan('013800152015')">
+          DiGiorno
+        </button>
+        <button class="qs-chip"
+                onclick="quickScan('021000011988')">
+          Cream Cheese
+        </button>
+      </div>
+    </div>
+
+  </div><!-- /col-left -->
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!--  RIGHT COLUMN  —  CART                            -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="col-right">
+    <div class="cart-section">
+
+      <!-- Cart header -->
+      <div class="cart-header">
+        <div class="cart-title-row">
+          <span class="cart-title">Shopping Cart</span>
+          <span class="cart-badge" id="cartBadge">0 items</span>
+        </div>
+        <button class="btn btn-ghost btn-sm"
+                onclick="openProducts()"
+                title="Browse all products">
+          Products
+        </button>
+      </div>
+
+      <!-- Session meta -->
+      <div class="session-meta">
+        <div class="sm-item">
+          <div class="sm-label">Session</div>
+          <div class="sm-value" id="smSession">——</div>
+        </div>
+        <div class="sm-item">
+          <div class="sm-label">Customer</div>
+          <div class="sm-value" id="smCustomer">——</div>
+        </div>
+        <div class="sm-item">
+          <div class="sm-label">Scans</div>
+          <div class="sm-value accent" id="smScans">0</div>
+        </div>
+      </div>
+
+      <!-- Column headers -->
+      <div class="cart-cols">
+        <span class="cc-head">Product</span>
+        <span class="cc-head r">Qty</span>
+        <span class="cc-head r">Unit</span>
+        <span class="cc-head r">Total</span>
+        <span class="cc-head r">Actions</span>
+      </div>
+
+      <!-- Cart list -->
+      <div class="cart-list" id="cartList">
+        <div class="empty-state" id="emptyState">
+          <div class="es-icon">Cart</div>
+          <div class="es-title">Cart is empty</div>
+          <div class="es-sub">
+            Start the session and scan a product
+          </div>
+        </div>
+      </div>
+
+      <!-- Totals -->
+      <div class="cart-totals">
+        <div class="total-row">
+          <span class="t-label">Subtotal</span>
+          <span class="t-value" id="tSubtotal">$0.00</span>
+        </div>
+        <div class="total-row">
+          <span class="t-label" id="tTaxLabel">Tax (8%)</span>
+          <span class="t-value" id="tTax">$0.00</span>
+        </div>
+        <div class="total-divider"></div>
+        <div class="total-row total-grand">
+          <span class="t-label">Total</span>
+          <span class="t-value" id="tTotal">$0.00</span>
+        </div>
+
+        <button
+          class   = "checkout-btn"
+          onclick = "doCheckout()"
+        >
+          Checkout
+        </button>
+      </div>
+
+    </div><!-- /cart-section -->
+  </div><!-- /col-right -->
+
+</div><!-- /app-body -->
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  PRODUCTS DRAWER                                       -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="modal-overlay hidden" id="productsModal">
+  <div class="modal-card" style="max-width:640px">
+    <div class="modal-header" style="text-align:left;padding:20px 24px 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div class="modal-title" style="font-size:18px">
+            Product Database
+          </div>
+          <div class="modal-sub">
+            Click any product to add to cart
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm"
+                onclick="closeProducts()">✕ Close</button>
+      </div>
+      <input
+        type        = "text"
+        id          = "prodSearch"
+        class       = "form-input"
+        placeholder = "Search products…"
+        oninput     = "filterProducts()"
+        style       = "margin-top:12px"
+      />
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:12px 16px" id="prodList">
+      <div style="text-align:center;padding:40px;color:#94a3b8">
+        Loading…
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  CHECKOUT MODAL                                        -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="modal-overlay hidden" id="checkoutModal">
+  <div class="modal-card">
+
+    <div class="modal-header">
+      <div class="modal-success-icon">Done</div>
+      <div class="modal-title">Checkout Complete</div>
+      <div class="modal-sub">
+        Thank you for shopping with SmartCart
+      </div>
+    </div>
+
+    <div class="modal-receipt" id="modalReceipt"></div>
+
+    <div class="modal-footer">
+      <div>
+        <div class="modal-total-label">Total Paid</div>
+        <div class="modal-total-value" id="modalTotal">$0.00</div>
+      </div>
+      <button
+        class   = "btn btn-primary btn-md"
+        onclick = "closeCheckout()"
+      >
+        New Session
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  TOAST CONTAINER                                       -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="/static/script.js"></script>
+</body>
+</html>

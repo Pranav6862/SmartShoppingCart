@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# Local environments and dependency caches
+smartcart_env/
+.venv/
+venv/
+
+# Runtime output
+logs/
+output/
+web/static/uploads/
+
+# Local secrets
+.env

@@ -1,0 +1,28 @@
+# Core Computer Vision
+opencv-python
+opencv-contrib-python
+
+# Barcode Scanning
+pyzbar
+
+# AI / Detection
+ultralytics
+deep-sort-realtime
+
+# Data & Math
+numpy
+pandas
+
+# Image Processing
+Pillow
+
+# Dashboard & UI
+Flask
+Flask-SocketIO
+matplotlib
+
+# Database
+SQLAlchemy
+
+# Utilities
+python-dotenv
